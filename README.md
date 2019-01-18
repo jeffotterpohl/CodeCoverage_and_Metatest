@@ -10,7 +10,7 @@ The **CodeCoverage_and_MetaTest** is a module that was created to assist with ru
 
 This function can be used to run Invoke-Pester on an assoicated path.  Gather information and then after running the Pester Tests returns a summary of at the end of the tests to give an overview of the results from Pester Tests.
 
- **`[string]` ModulePath** (_Required_):  This specifies the location to which to look for the tests.ps1 and the psm files.
+ - **`[string]` ModulePath** (_Required_):  This specifies the location to which to look for the tests.ps1 and the psm files.
  
  ####  Get-CodeCoverageResult Examples
  - [Get-CodeCoverageResult -ModulePath C:\temp]
@@ -19,10 +19,10 @@ This function can be used to run Invoke-Pester on an assoicated path.  Gather in
  
  This function can be used to speed up Meta.Tests.ps1 if you currently have a lot of items in your branch and only want to scan a small subset of module(s) or file(s). 
  
-  **`[string]` RepoPath** (_Required_):  Specifies the location of the source repo.
-  **`[string]` TempLocation** (_Required_):  Specifies the location that does not currently exist and this will be the staging area for the scan.
-  **`[string[]]` ModifiedRepo** (_Required_):  Specifies the path to the module (the path that follows RepoPath)
-  **`[Boolean]` RemoveTempFolder** (_write_): Specifies if the TempLocation specified above should be deleted after running the test.  Default value is $true
+ -  **`[string]` RepoPath** (_Required_):  Specifies the location of the source repo.
+ -  **`[string]` TempLocation** (_Required_):  Specifies the location that does not currently exist and this will be the staging area for the scan.
+ -  **`[string[]]` ModifiedRepo** (_Required_):  Specifies the path to the module (the path that follows RepoPath)
+ -  **`[Boolean]` RemoveTempFolder** (_write_): Specifies if the TempLocation specified above should be deleted after running the test.  Default value is $true
   
   #### Get-MetaTestResult Examples
   Get-MetaTestResult -RepoPath 'C:\Source' -TempLocation $env:temp\folder -ModifiedRepo Modules\CustomModules\One -RemoveTempFolder $false
