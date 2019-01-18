@@ -12,76 +12,74 @@
         Get-CodeCoverageResults -ModulePath $ModulePath
 #>
 
-Function Get-CodeCoverageResults
+Function Get-CodeCoverageResult
 {
     [CmdletBinding()]
+    [OutputType([System.Collections.ArrayList])]
     param
     (
         [Parameter(Mandatory = $true)]
+        [ValidateScript( { if (-not (Test-Path -LiteralPath $_ -PathType Container))
+                {
+                    throw "Path '${_} folder does not exist. Please specify a folder containing the test scripts"
+                }$true})]
         [String]
         $ModulePath
     )
 
-    if ((Test-Path $ModulePath))
+    $ptCoverage = New-Object System.Collections.ArrayList
+    $testsPS1 = Get-ChildItem -Path $ModulePath -Filter *.tests.ps1 -Exclude *.Integration.Tests.ps1 -Recurse | where-object { $_.FullName -inotmatch 'DscResource.Tests' }
+
+    if (($testsPS1))
     {
-        $ptCoverage = New-Object System.Collections.ArrayList
-        $testsPS1 = Get-ChildItem -Path $ModulePath -Filter *.tests.ps1 -Exclude *.Integration.Tests.ps1 -Recurse | where-object { $_.FullName -inotmatch 'DscResource.Tests' }
-
-        if (($testsPS1))
+        foreach ($testPS1 in $testsPS1)
         {
-            foreach ($testPS1 in $testsPS1)
+            $pto = New-Object PSObject
+
+            $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Test Script' -Value $($testPS1.Name) -PassThru
+            $psm = ($testPS1.name).split('.')
+            $psm = $psm[0] + '*.psm1'
+            $psmChild = Get-ChildItem -Path $ModulePath -Filter $psm -Recurse
+            if ($Null -ne $psmChild)
             {
-                $pto = New-Object PSObject
+                $pester = Invoke-Pester -script $testPS1.FullName -CodeCoverage $psmChild.FullName -Verbose -PassThru
 
-                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Test Script' -Value $($testPS1.Name) -PassThru
-                $psm = ($testPS1.name).split('.')
-                $psm = $psm[0] + '*.psm1'
-                $psmChild = Get-ChildItem -Path $ModulePath -Filter $psm -Recurse
-                if ($Null -ne $psmChild)
-                {
-                    $pester = Invoke-Pester -script $testPS1.FullName -CodeCoverage $psmChild.FullName -Verbose -PassThru
+                $hitCommandCount = $pester.CodeCoverage.HitCommands | Group-object -Property Function| Select-Object Name, Count
+                $missedCommandCount = $pester.CodeCoverage.MissedCommands | Group-object -Property Function| Select-Object Name, Count
 
-                    $hitCommandCount = $pester.CodeCoverage.HitCommands | Group-object -Property Function| Select-Object Name, Count
-                    $missedCommandCount = $pester.CodeCoverage.MissedCommands | Group-object -Property Function| Select-Object Name, Count
-
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Module' -Value $psmChild.Name -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'TotalCount' -Value $pester.TotalCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'PassCount' -Value $pester.passedCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'FailedCount' -Value $pester.FailedCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'SkippedCount' -Value $pester.SkippedCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsAnalyzed' -Value $pester.CodeCoverage.NumberOfCommandsAnalyzed -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsExecuted' -Value $pester.CodeCoverage.NumberOfCommandsExecuted -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Hit Commands' -Value $hitCommandCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsMissed' -Value $pester.CodeCoverage.NumberOfCommandsMissed -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Missed Commands' -Value $missedCommandCount -PassThru
-                }
-                else
-                {
-                    $pester = Invoke-Pester -script $testPS1.FullName -Verbose -PassThru
-
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Module' -Value 'Unable to find the associated psm1' -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'TotalCount' -Value $pester.TotalCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'PassCount' -Value $pester.passedCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'FailedCount' -Value $pester.FailedCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'SkippedCount' -Value $pester.SkippedCount -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsAnalyzed' -Value 'Code Coverage not analyzed' -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsExecuted' -Value 'Code Coverage not analyzed' -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Hit Commands' -Value 'Code Coverage not analyzed' -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsMissed' -Value 'Code Coverage not analyzed' -PassThru
-                    $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Missed Commands' -Value 'Code Coverage Not Analyzed' -PassThru
-                }
-                $ptCoverage.Add($pt) |Out-Null
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Module' -Value $psmChild.Name -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'TotalCount' -Value $pester.TotalCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'PassCount' -Value $pester.passedCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'FailedCount' -Value $pester.FailedCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'SkippedCount' -Value $pester.SkippedCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsAnalyzed' -Value $pester.CodeCoverage.NumberOfCommandsAnalyzed -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsExecuted' -Value $pester.CodeCoverage.NumberOfCommandsExecuted -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Hit Commands' -Value $hitCommandCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsMissed' -Value $pester.CodeCoverage.NumberOfCommandsMissed -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Missed Commands' -Value $missedCommandCount -PassThru
             }
-            $ptCoverage
+            else
+            {
+                $pester = Invoke-Pester -script $testPS1.FullName -Verbose -PassThru
+
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Module' -Value 'Unable to find the associated psm1' -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'TotalCount' -Value $pester.TotalCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'PassCount' -Value $pester.passedCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'FailedCount' -Value $pester.FailedCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'SkippedCount' -Value $pester.SkippedCount -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsAnalyzed' -Value 'Code Coverage not analyzed' -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsExecuted' -Value 'Code Coverage not analyzed' -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Hit Commands' -Value 'Code Coverage not analyzed' -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'CommandsMissed' -Value 'Code Coverage not analyzed' -PassThru
+                $pt = Add-Member -InputObject $pto -MemberType NoteProperty -Name 'Missed Commands' -Value 'Code Coverage Not Analyzed' -PassThru
+            }
+            $ptCoverage.Add($pt) |Out-Null
         }
-        else
-        {
-            write-error "Unable to find any .tests.ps1 files in the specified directory"
-        }
+        $ptCoverage
     }
     else
     {
-        write-error "Path does not exist $ModulePath"
+        throw "Unable to find any .tests.ps1 files in the specified directory"
     }
 }
 
@@ -118,16 +116,18 @@ Function Get-CodeCoverageResults
         Get-MetatestResults -RepoPath $RepoPath -TempLocation $TempLocation -ModifiedRepo $Modifiedrepo -RemoveTempFolder $true
 #>
 
-Function Get-MetatestResults
+Function Get-MetaTestResult
 {
     [CmdletBinding()]
     param
     (
         [Parameter(Mandatory = $true)]
+        [ValidateScript( {  (Test-Path -LiteralPath $_ -PathType Container)})]
         [String]
         $RepoPath,
 
         [Parameter(Mandatory = $true)]
+        [ValidateScript( {-not (Test-Path -LiteralPath $_ )})]
         [String]
         $TempLocation,
 
@@ -140,108 +140,94 @@ Function Get-MetatestResults
         $RemoveTempFolder = $true
     )
 
-    if ((Test-Path $RepoPath))
+    #copies the required test folder from the repo
+    if (Test-Path $RepoPath\tests)
     {
-        if (!(Test-Path $TempLocation))
+        Copy-Item $RepoPath\tests $TempLocation\tests -Recurse
+    }
+    else
+    {
+        throw "The $RepoPath\Tests folder could not be found"
+    }
+
+    #copies the custom analyzer rules
+    if (Test-path $RepoPath\src\Modules\CustomModules\MN-ANalyzerRules)
+    {
+        Copy-Item $RepoPath\src\Modules\CustomModules\MN-ANalyzerRules $TempLocation\tests\MN-AnalyzerRules -Recurse
+    }
+    else
+    {
+        if ($RemoveTempFolder)
         {
-            #copies the required test folder from the repo
-            if (Test-Path $RepoPath\tests)
+            Remove-item $TempLocation -Recurse -Force
+        }
+
+        write-error "The MN_Analyzer Rules folder could not be found" -ErrorAction Stop
+    }
+
+    #copys the specified modified folder(s)\file(s)
+    foreach ($item in $ModifiedRepo)
+    {
+        if (Test-Path $RepoPath\$item)
+        {
+            $fileOrFolder = Get-ItemProperty $RepoPath\$item
+
+            if ($fileOrFolder.Attributes -eq 'Directory')
             {
-                Copy-Item $RepoPath\tests $TempLocation\tests -Recurse
+                Copy-Item $RepoPath\$item $TempLocation\$item -Recurse
             }
             else
             {
-                write-error "The $RepoPath\Tests folder could not be found" -ErrorAction Stop
-            }
-
-            #copies the custom analyzer rules
-            if (Test-path $RepoPath\src\Modules\CustomModules\MN-ANalyzerRules)
-            {
-                Copy-Item $RepoPath\src\Modules\CustomModules\MN-ANalyzerRules $TempLocation\tests\MN-AnalyzerRules -Recurse
-            }
-            else
-            {
-                if ($RemoveTempFolder)
-                {
-                    Remove-item $TempLocation -Recurse -Force
-                }
-
-                write-error "The MN_Analyzer Rules folder could not be found" -ErrorAction Stop
-            }
-
-            #copys the specified modified folder(s)\file(s)
-            foreach ($item in $ModifiedRepo)
-            {
-                if (Test-Path $RepoPath\$item)
-                {
-                    $fileOrFolder = Get-ItemProperty $RepoPath\$item
-
-                    if ($fileOrFolder.Attributes -eq 'Directory')
-                    {
-                        Copy-Item $RepoPath\$item $TempLocation\$item -Recurse
-                    }
-                    else
-                    {
-                        $fileLoc = ($item.Split('\'))[0..($item.Split('\').count - 2)] -join '\'
-                        New-Item -ItemType Directory $TempLocation\$fileLoc |Out-Null
-                        Copy-Item $RepoPath\$item $TempLocation\$fileLoc
-                    }
-                }
-                else
-                {
-                    if ($RemoveTempFolder)
-                    {
-                        Remove-item $TempLocation -Recurse -Force
-                    }
-
-                    write-error "The specified path: $item could not be found in $RepoPath" -ErrorAction Stop
-                }
-            }
-
-            #Creates the DSC\CustomModules folder as required by the Meta.Tests if not already exists
-            if (!(Test-Path "$TempLocation\src\DSC\CustomModules"))
-            {
-                New-Item -ItemType Directory $TempLocation\src\DSC\CustomModules |Out-Null
-            }
-
-            #Creates the Modules\CustomModules folder as required by the Meta.Tests if not already exists
-            if (!(Test-Path "$TempLocation\src\Modules\CustomModules"))
-            {
-                New-Item -ItemType Directory $TempLocation\src\Modules\CustomModules |Out-Null
-            }
-
-            #Modify the Meta.Tests.ps1 file to point to the new location for MN_AnalyzerRules as to ensure custom rules are not scanned by Meta.Tests
-            if (Test-Path $TempLocation\tests\Unit\Meta.tests.ps1)
-            {
-                $mTest1 = "Join-Path -Path `$srcRoot -ChildPath 'Modules\CustomModules\MN-AnalyzerRules'"
-                $mTest2 = "Join-Path -Path `$testsRoot -ChildPath 'MN-AnalyzerRules'"
-                (Get-content $TempLocation\tests\Unit\Meta.tests.ps1).replace($mTest1, $mTest2) |set-Content $TempLocation\tests\Unit\Meta.tests.ps1
-
-                Invoke-Pester -Script $TempLocation\Tests\Unit\Meta.Tests.ps1 -Verbose
-            }
-            else
-            {
-                if ($RemoveTempFolder)
-                {
-                    Remove-item $TempLocation -Recurse -Force
-                }
-
-                Write-Error "Unable to find the Meta.tests.ps1 file to make modifications to point to the custom AnalyzerRules." -ErrorAction Stop
-            }
-
-            #if specified deletes the Temporary location
-            if ($RemoveTempFolder)
-            {
-                Remove-item $TempLocation -Recurse -Force
+                $fileLoc = ($item.Split('\'))[0..($item.Split('\').count - 2)] -join '\'
+                New-Item -ItemType Directory $TempLocation\$fileLoc |Out-Null
+                Copy-Item $RepoPath\$item $TempLocation\$fileLoc
             }
         }
         else
         {
-            Write-Error "The specified temp location: $TempLocation already exists. Please delete prior to launching." -ErrorAction Stop
+            if ($RemoveTempFolder)
+            {
+                Remove-item $TempLocation -Recurse -Force
+            }
+
+            write-error "The specified path: $item could not be found in $RepoPath" -ErrorAction Stop
         }
+    }
+
+    #Creates the DSC\CustomModules folder as required by the Meta.Tests if not already exists
+    if (!(Test-Path "$TempLocation\src\DSC\CustomModules"))
+    {
+        New-Item -ItemType Directory $TempLocation\src\DSC\CustomModules |Out-Null
+    }
+
+    #Creates the Modules\CustomModules folder as required by the Meta.Tests if not already exists
+    if (!(Test-Path "$TempLocation\src\Modules\CustomModules"))
+    {
+        New-Item -ItemType Directory $TempLocation\src\Modules\CustomModules |Out-Null
+    }
+
+    #Modify the Meta.Tests.ps1 file to point to the new location for MN_AnalyzerRules as to ensure custom rules are not scanned by Meta.Tests
+    if (Test-Path $TempLocation\tests\Unit\Meta.tests.ps1)
+    {
+        $mTest1 = "Join-Path -Path `$srcRoot -ChildPath 'Modules\CustomModules\MN-AnalyzerRules'"
+        $mTest2 = "Join-Path -Path `$testsRoot -ChildPath 'MN-AnalyzerRules'"
+        (Get-content $TempLocation\tests\Unit\Meta.tests.ps1).replace($mTest1, $mTest2) |set-Content $TempLocation\tests\Unit\Meta.tests.ps1
+
+        Invoke-Pester -Script $TempLocation\Tests\Unit\Meta.Tests.ps1 -Verbose
     }
     else
     {
-        Write-Error "The specified Repo path is invalid." -ErrorAction Stop
+        if ($RemoveTempFolder)
+        {
+            Remove-item $TempLocation -Recurse -Force
+        }
+
+        Write-Error "Unable to find the Meta.tests.ps1 file to make modifications to point to the custom AnalyzerRules." -ErrorAction Stop
+    }
+
+    #if specified deletes the Temporary location
+    if ($RemoveTempFolder)
+    {
+        Remove-item $TempLocation -Recurse -Force
     }
 }
